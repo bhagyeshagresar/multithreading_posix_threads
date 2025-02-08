@@ -9,12 +9,12 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <semaphore.h>
-
+#include <time.h>
 
 
 
 #define BUFFER_SIZE 5           //Size of the buffer
-static volatile int num_writes = 10;      //Number of Writes performed by the producer
+static int num_writes = 13;      //Number of Writes performed by the producer
 //static volatile int x = 0;      //value that gets stored in a buffer
 static int buffer[BUFFER_SIZE]; //Shared Circular Buffer
 static int head = 0;            //Index to write to the buffer
@@ -22,28 +22,24 @@ static int tail = 0;            //Index to read from the buffer
 pthread_mutex_t lock;           //Mutex to lock the resource
 sem_t sem_full;                 //Counting semaphore to keep track of number of elements filled
 sem_t sem_empty;                //Counting semaphore to keep track of number of empty elements
+sem_t bin_sem;
 
 
-
-int wait(int s){
-    return --s;
-}
-
-int release(int s){
-    return ++s;
-}
 
 void* producer(void* parameters){
 
-    int num = *(int*)parameters;
+    
+    srand(time(NULL));
+    
 
+   
     for(int i = 0; i < num_writes; i++){
+        int x = (rand()%10) + 1;
         sem_wait(&sem_empty);
         pthread_mutex_lock(&lock);
-        buffer[head] = num;
-        int temp = head;
+        buffer[head] = x;
+        printf("Producer produced an item: %d at %d\n", x, head);
         head = (head+1)%BUFFER_SIZE;
-        printf("Producer produced an item: %d at %d\n", buffer[head], temp);
         pthread_mutex_unlock(&lock);
         sem_post(&sem_full);
 
@@ -61,9 +57,8 @@ void* consumer(void* parameters){
         sem_wait(&sem_full);
         pthread_mutex_lock(&lock);
         val = buffer[tail];
-        int temp = tail;
+        printf("Consumer consumed an item: %d at %d\n", val, tail);
         tail = (tail+1)%BUFFER_SIZE;
-        printf("Consumer consumed an item: %d at %d\n", buffer[tail], temp);
         pthread_mutex_unlock(&lock);
         sem_post(&sem_empty);
         
@@ -95,15 +90,21 @@ int main(int argc, char* argv[]){
         exit(1);
     }
 
+    // if(sem_init(&sem_empty, 0, 1) != 0){
+    //     perror("Error in initializing binary semaphore for empty\n");
+    //     exit(1);
+    // }
+
+    
     
     // create the thread objs
     pthread_t thread1 = 0;
     pthread_t thread2 = 1;
 
-    int x = 100;
-
+  
     //Create the new threads
-    int result1 = pthread_create(&thread1, NULL, producer, (void*)&x);
+    int result1 = pthread_create(&thread1, NULL, producer, NULL);
+    //sem_post(&bin_sem);
     int result2 = pthread_create(&thread2, NULL, consumer, NULL);
 
     if(result1 != 0){
@@ -118,6 +119,13 @@ int main(int argc, char* argv[]){
 
     pthread_join(thread1, NULL);
     pthread_join(thread2, NULL);
+
+    sem_destroy(&sem_full);
+    sem_destroy(&sem_empty);
+    //sem_destroy(&bin_sem);
+    pthread_mutex_destroy(&lock);
+
+    pthread_exit(NULL);
 
     return 0;
 
